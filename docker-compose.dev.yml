@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: taskflow-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - ${POSTGRES_DEV_VOLUME}:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ${NETWORK_NAME}-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Backend en mode développement
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: taskflow-backend-dev
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      PORT: ${BACKEND_PORT}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ${NETWORK_NAME}-dev
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: sh -c "npx prisma db push && npm run dev"
+
+  # Frontend en mode développement
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: taskflow-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT}:5173"
+    environment:
+      - VITE_API_URL=http://localhost:${BACKEND_PORT}/api
+    depends_on:
+      - backend-dev
+    networks:
+      - ${NETWORK_NAME}-dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  taskflow_postgres_dev_data:
+
+networks:
+  taskflow-network-dev:
+    driver: bridge

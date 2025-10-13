@@ -1,7 +1,7 @@
 
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/';
 
 
 //instance axios avec configuration de base
@@ -58,6 +58,15 @@ export const tasksApi = {
     updateTask: (id, data) => api.put(`/tasks/${id}`, data),
     deleteTask: (id) => api.delete(`tasks/${id}`),
     getStats: () => api.get('tasks/stats')
+};
+
+//Applications API
+export const applicationsApi = {
+    getApplications: (params) => api.get('/applications', { params }),
+    createApplication: (data) => api.post('/applications', data),
+    updateApplication: (id, data) => api.put(`/applications/${id}`, data),
+    deleteApplication: (id) => api.delete(`/applications/${id}`),
+    getStats: () => api.get('/applications/stats')
 };
 
 export default api;

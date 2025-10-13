@@ -22,6 +22,7 @@ model User {
   updatedAt DateTime  @updatedAt
 
   tasks     Task[]
+  applications  Application[]
 }
 
 model Task {
@@ -40,4 +41,30 @@ model Task {
   
   @@index([userId])
   @@index([status])
+}
+
+model Application {
+  id              String    @id @default(uuid())
+  title           String    // Poste visé
+  company         String    // Entreprise
+  type            String    // "stage" ou "emploi"
+  status          String    @default("applied") // applied, interview, rejected, accepted
+  applicationDate DateTime  @default(now())
+  interviewDate   DateTime?
+  notes           String?
+  contactEmail    String?
+  contactPhone    String?
+  jobUrl          String?   // URL de l'offre
+  salary          String?   // Salaire proposé
+  location        String?   // Lieu
+  followUpDate    DateTime? // Date de relance
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@index([type])
 }

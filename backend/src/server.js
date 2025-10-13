@@ -41,9 +41,12 @@ app.get("/health", async (req, res) => {
 
 //Routes
 const authRoutes = require("./routes/auth");
-const taskRoutes = require("./routes/tasks")
+const taskRoutes = require("./routes/tasks");
+const applicationRoutes = require("./routes/applications");
+
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
+app.use("/api/applications", applicationRoutes);
 
 // fermeture de la connexion à la base de données lors de l'arrêt du serveur    
 process.on("SIGINT", async () => {
