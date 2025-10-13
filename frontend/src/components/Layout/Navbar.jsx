@@ -49,7 +49,7 @@ const Navbar = () => {
           <div className="flex items-center space-x-8">
             <Link to="/dashboard" className="flex items-center space-x-3">
               <div className="bg-primary-500 p-2 rounded-lg">
-                <CheckSquare className="w-6 h-6 text-white" />
+                <img src="/logo.svg" alt="TaskFlow Logo" className="w-8 h-8" />
               </div>
               <span className="text-2xl font-bold text-slate-900 dark:text-white">
                 TaskFlow

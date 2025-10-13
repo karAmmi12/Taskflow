@@ -52,6 +52,7 @@ model Application {
   applicationDate DateTime  @default(now())
   interviewDate   DateTime?
   notes           String?
+  contactName     String?
   contactEmail    String?
   contactPhone    String?
   jobUrl          String?   // URL de l'offre

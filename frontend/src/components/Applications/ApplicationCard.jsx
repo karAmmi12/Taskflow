@@ -111,6 +111,12 @@ const ApplicationCard = ({ application, onEdit, onDelete }) => {
       {/* Contact & Links */}
       <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-700">
         <div className="flex items-center space-x-3">
+          {/* Name */}
+          {application.contactName && (
+            <span className="text-sm text-slate-600 dark:text-slate-400">
+              {application.contactName}
+            </span>
+          )}
           {/* Email */}
           {application.contactEmail && (
             <a

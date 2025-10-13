@@ -33,7 +33,7 @@ const Login = () => {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-500 rounded-2xl mb-4">
-            <CheckSquare className="w-10 h-10 text-white" />
+            <img src="/logo.svg" alt="Logo" className="w-20 h-20" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
             TaskFlow

@@ -10,6 +10,7 @@ const ApplicationModal = ({ isOpen, onClose, onSubmit, application }) => {
     applicationDate: '',
     interviewDate: '',
     notes: '',
+    contactName: '',
     contactEmail: '',
     contactPhone: '',
     jobUrl: '',
@@ -30,6 +31,7 @@ const ApplicationModal = ({ isOpen, onClose, onSubmit, application }) => {
         interviewDate: application.interviewDate ? 
           new Date(application.interviewDate).toISOString().split('T')[0] : '',
         notes: application.notes || '',
+        contactName: application.contactName || '',
         contactEmail: application.contactEmail || '',
         contactPhone: application.contactPhone || '',
         jobUrl: application.jobUrl || '',
@@ -47,6 +49,7 @@ const ApplicationModal = ({ isOpen, onClose, onSubmit, application }) => {
         applicationDate: new Date().toISOString().split('T')[0],
         interviewDate: '',
         notes: '',
+        contactName: '',
         contactEmail: '',
         contactPhone: '',
         jobUrl: '',
@@ -225,6 +228,18 @@ const ApplicationModal = ({ isOpen, onClose, onSubmit, application }) => {
 
             {/* Contact */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Nom de contact
+                </label>
+                <input
+                  type="text"
+                  name="contactName"
+                  value={formData.contactName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-slate-900 dark:text-white"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Email de contact

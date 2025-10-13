@@ -8,6 +8,7 @@ CREATE TABLE "Application" (
     "applicationDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "interviewDate" TIMESTAMP(3),
     "notes" TEXT,
+    "contactName" TEXT,
     "contactEmail" TEXT,
     "contactPhone" TEXT,
     "jobUrl" TEXT,

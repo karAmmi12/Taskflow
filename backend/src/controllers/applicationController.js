@@ -44,7 +44,7 @@ const createApplication = async (req, res) => {
     try {
         const { 
             title, company, type, status, applicationDate, 
-            interviewDate, notes, contactEmail, contactPhone, 
+            interviewDate, notes, contactName, contactEmail, contactPhone, 
             jobUrl, salary, location, followUpDate 
         } = req.body;
 
@@ -86,6 +86,7 @@ const createApplication = async (req, res) => {
                 applicationDate: applicationDate ? new Date(applicationDate) : new Date(),
                 interviewDate: interviewDate ? new Date(interviewDate) : null,
                 notes: notes?.trim() || null,
+                contactName: contactName?.trim() || null,
                 contactEmail: contactEmail?.trim() || null,
                 contactPhone: contactPhone?.trim() || null,
                 jobUrl: jobUrl?.trim() || null,
