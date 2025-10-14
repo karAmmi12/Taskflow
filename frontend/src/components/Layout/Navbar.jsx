@@ -1,4 +1,4 @@
-import { LogOut, Moon, Sun, CheckSquare, KanbanSquare, Briefcase } from 'lucide-react';
+import { LogOut, Moon, Sun, CheckSquare, KanbanSquare, Briefcase, Bell, Search} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
@@ -38,6 +38,16 @@ const Navbar = () => {
       name: 'Candidatures',
       path: '/applications',
       icon: Briefcase,
+    },
+    {
+      name: 'Alertes emploi',
+      path: '/job-alerts',
+      icon: Bell,
+    },
+    {
+      name: 'Offres emploi',
+      path: '/job-offers',
+      icon: Search,
     },
   ];
 

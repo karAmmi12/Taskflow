@@ -23,6 +23,8 @@ model User {
 
   tasks     Task[]
   applications  Application[]
+  jobAlerts     JobAlert[]
+  jobOffers     JobOffer[]
 }
 
 model Task {
@@ -68,4 +70,59 @@ model Application {
   @@index([userId])
   @@index([status])
   @@index([type])
+}
+
+model JobOffer {
+  id          String    @id @default(uuid())
+  externalId  String    // ID de l'offre sur l'API externe
+  title       String    // Titre du poste
+  company     String    // Entreprise
+  location    String?   // Localisation
+  salary      String?   // Salaire
+  contract    String?   // Type de contrat
+  description String?   // Description
+  url         String    // URL vers l'offre
+  source      String    // Source (Adzuna, JobTome, etc.)
+  publishedAt DateTime  // Date de publication
+  matchScore  Int       @default(0) // Score de pertinence
+  isRead      Boolean   @default(false) // Lu par l'utilisateur
+  isSaved     Boolean   @default(false) // Sauvegardé par l'utilisateur
+  isApplied   Boolean   @default(false) // Candidature envoyée
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  alertId     String    // Alerte qui a généré cette offre
+  alert       JobAlert  @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([externalId, source]) // Éviter les doublons
+  @@index([userId])
+  @@index([alertId])
+  @@index([publishedAt])
+  @@index([matchScore])
+}
+
+model JobAlert {
+  id          String    @id @default(uuid())
+  title       String    // Titre de l'alerte (ex: "Développeur React")
+  keywords    String[]  @default([]) // Mots-clés de recherche
+  location    String?   // Localisation
+  company     String?   // Entreprise ciblée
+  salary      String?   // Fourchette salariale
+  contract    String?   // Type de contrat (CDI, stage, etc.)
+  active      Boolean   @default(true) // Alerte active ou non
+  frequency   String    @default("daily") // daily, weekly
+  lastCheck   DateTime? // Dernière vérification
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  offers      JobOffer[] // Offres trouvées par cette alerte
+
+  @@index([userId])
+  @@index([active])
 }

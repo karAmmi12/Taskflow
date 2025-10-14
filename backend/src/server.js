@@ -43,10 +43,16 @@ app.get("/health", async (req, res) => {
 const authRoutes = require("./routes/auth");
 const taskRoutes = require("./routes/tasks");
 const applicationRoutes = require("./routes/applications");
+const jobAlertRoutes = require("./routes/jobAlerts");
+const jobOfferRoutes = require("./routes/jobOffers"); 
+
 
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/applications", applicationRoutes);
+app.use("/api/job-alerts", jobAlertRoutes); 
+app.use("/api/job-offers", jobOfferRoutes); 
+
 
 // fermeture de la connexion à la base de données lors de l'arrêt du serveur    
 process.on("SIGINT", async () => {

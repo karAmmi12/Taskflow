@@ -69,5 +69,23 @@ export const applicationsApi = {
     getStats: () => api.get('/applications/stats')
 };
 
+//Job Alerts API
+export const jobAlertsApi = {
+    getJobAlerts: (params) => api.get('/job-alerts', { params }),
+    createJobAlert: (data) => api.post('/job-alerts', data),
+    updateJobAlert: (id, data) => api.put(`/job-alerts/${id}`, data),
+    deleteJobAlert: (id) => api.delete(`/job-alerts/${id}`),
+    getStats: () => api.get('/job-alerts/stats')
+};
+
+//Job Offers API
+export const jobOffersApi = {
+    getJobOffers: (params) => api.get('/job-offers', { params }),
+    updateOfferStatus: (id, data) => api.put(`/job-offers/${id}/status`, data),
+    processAlert: (alertId) => api.post(`/job-offers/process/${alertId}`),
+    getStats: () => api.get('/job-offers/stats'),
+    deleteOffer: (id) => api.delete(`/job-offers/${id}`)
+};
+
 export default api;
 

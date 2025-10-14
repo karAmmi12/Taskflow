@@ -38,6 +38,9 @@ services:
       PORT: ${BACKEND_PORT}
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
       JWT_SECRET: ${JWT_SECRET}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY}
+      JOBTOME_API_KEY: ${JOBTOME_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy

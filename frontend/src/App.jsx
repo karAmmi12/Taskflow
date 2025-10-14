@@ -3,6 +3,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Applications from './pages/Applications';
+import JobAlerts from './pages/JobAlerts';
+import JobOffers from './pages/JobOffers';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import useAuthStore from './store/authStore';
 
@@ -48,6 +50,22 @@ function App() {
           element={
             <ProtectedRoute>
               <Applications />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/job-alerts"
+          element={
+            <ProtectedRoute>
+              <JobAlerts />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/job-offers"
+          element={
+            <ProtectedRoute>
+              <JobOffers />
             </ProtectedRoute>
           }
         />
