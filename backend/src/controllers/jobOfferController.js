@@ -14,6 +14,9 @@ jobSearchService.testAdzunaConnection().then(result => {
         jobSearchService.testWithRealAlert();
     }
 });
+jobSearchService.testFranceTravailConnection().then(result => {
+    console.log('🧪 Test France Travail:', result);
+});
 
 // Récupérer les offres d'emploi de l'utilisateur
 const getJobOffers = async (req, res) => {

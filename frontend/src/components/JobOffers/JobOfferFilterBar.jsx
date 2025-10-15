@@ -47,6 +47,7 @@ const JobOfferFilterBar = ({
             <option value="">Toutes sources</option>
             <option value="Adzuna">Adzuna</option>
             <option value="JobTome">JobTome</option>
+            <option value="France Travail">France Travail</option> 
           </select>
 
           {/* Read Status Filter */}

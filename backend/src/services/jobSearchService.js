@@ -14,6 +14,15 @@ class JobSearchService {
                 baseUrl: 'https://jobsearch.api.jobtome.com/api/v2/jobs',
                 apiKey: process.env.JOBTOME_API_KEY,
                 enabled: !!process.env.JOBTOME_API_KEY
+            },
+            franceTravail: {
+                baseUrl: 'https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search',
+                tokenUrl: 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire', // ✅ URL corrigée
+                clientId: process.env.FRANCE_TRAVAIL_CLIENT_ID,
+                clientSecret: process.env.FRANCE_TRAVAIL_CLIENT_SECRET,
+                enabled: !!(process.env.FRANCE_TRAVAIL_CLIENT_ID && process.env.FRANCE_TRAVAIL_CLIENT_SECRET),
+                token: null,
+                tokenExpiry: null
             }
         };
 
@@ -21,6 +30,8 @@ class JobSearchService {
         console.log('🔧 Configuration des APIs d\'emploi:');
         console.log('   Adzuna:', this.apis.adzuna.enabled ? '✅ Activée' : '❌ Désactivée');
         console.log('   JobTome:', this.apis.jobsearch.enabled ? '✅ Activée' : '❌ Désactivée');
+        console.log('   France Travail:', this.apis.franceTravail.enabled ? '✅ Activée' : '❌ Désactivée');
+
     }
 
     // Recherche via Adzuna (France)
@@ -136,6 +147,163 @@ class JobSearchService {
         }
     }
 
+    // Authentification France Travail (OAuth2)
+    async getFranceTravailToken() {
+        if (!this.apis.franceTravail.enabled) {
+            return null;
+        }
+
+        // Vérifier si le token est encore valide
+        if (this.apis.franceTravail.token && 
+            this.apis.franceTravail.tokenExpiry && 
+            Date.now() < this.apis.franceTravail.tokenExpiry) {
+            return this.apis.franceTravail.token;
+        }
+
+        try {
+            const params = new URLSearchParams({
+                grant_type: 'client_credentials',
+                client_id: this.apis.franceTravail.clientId,
+                client_secret: this.apis.franceTravail.clientSecret,
+                scope: 'api_offresdemploiv2 o2dsoffre'
+            });
+
+            const response = await axios.post(this.apis.franceTravail.tokenUrl, params, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+
+            this.apis.franceTravail.token = response.data.access_token;
+            this.apis.franceTravail.tokenExpiry = Date.now() + (response.data.expires_in * 1000) - 60000; // -1min de sécurité
+
+            console.log('✅ Token France Travail obtenu');
+            return this.apis.franceTravail.token;
+
+        } catch (error) {
+            console.error('❌ Erreur authentification France Travail:', error.response?.data || error.message);
+            return null;
+        }
+    }
+
+     // Recherche via France Travail
+    async searchFranceTravail(alert) {
+        if (!this.apis.franceTravail.enabled) {
+            console.log('❌ France Travail API non configurée');
+            return [];
+        }
+
+        if (!alert.keywords || alert.keywords.length === 0) {
+            console.log('❌ Aucun mot-clé défini pour cette alerte');
+            return [];
+        }
+
+        try {
+            const token = await this.getFranceTravailToken();
+            if (!token) {
+                console.log('❌ Impossible d\'obtenir le token France Travail');
+                return [];
+            }
+
+            const searchQuery = alert.keywords.join(' ');
+            const params = {
+                motsCles: searchQuery,
+                range: '0-19', // 20 résultats max
+                sort: '1' // Tri par date de création décroissante
+            };
+
+            // Ajouter la localisation si spécifiée
+            if (alert.location) {
+                params.commune = alert.location;
+            }
+
+            // Ajouter le type de contrat si spécifié
+            if (alert.contract) {
+                const contractMapping = {
+                    'CDI': 'CDI',
+                    'CDD': 'CDD',
+                    'Stage': 'MIS,DIN', // Mission intérimaire, Détachement
+                    'Alternance': 'SAI', // Contrat d'apprentissage/professionnalisation
+                    'Freelance': 'LIB' // Profession libérale
+                };
+                params.typeContrat = contractMapping[alert.contract] || alert.contract;
+            }
+
+            console.log(`🔍 Requête France Travail:`, {
+                motsCles: params.motsCles,
+                commune: params.commune,
+                typeContrat: params.typeContrat
+            });
+
+            const response = await axios.get(this.apis.franceTravail.baseUrl, { 
+                params,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                }
+            });
+
+            console.log(`📊 France Travail réponse:`, {
+                found: response.data.resultats?.length || 0,
+                total_available: response.data.filtresPossibles?.nbResultats || 0
+            });
+
+            if (!response.data.resultats || response.data.resultats.length === 0) {
+                console.log('ℹ️ Aucun résultat France Travail');
+                return [];
+            }
+
+            const processedJobs = response.data.resultats.map(job => ({
+                id: `francetravail_${job.id}`,
+                title: job.intitule,
+                company: job.entreprise?.nom || 'Entreprise non spécifiée',
+                location: job.lieuTravail?.libelle || 'Localisation non spécifiée',
+                salary: job.salaire?.libelle || null,
+                contract: this.mapFranceTravailContract(job.typeContrat),
+                description: job.description || 'Description non disponible',
+                url: job.origineOffre?.urlOrigine || `https://candidat.francetravail.fr/offres/recherche/detail/${job.id}`,
+                source: 'France Travail',
+                publishedAt: new Date(job.dateCreation),
+                matchScore: this.calculateMatchScore(alert, {
+                    ...job,
+                    title: job.intitule,
+                    company: job.entreprise?.nom,
+                    location: job.lieuTravail?.libelle,
+                    contract: this.mapFranceTravailContract(job.typeContrat)
+                })
+            }));
+
+            // Afficher quelques exemples
+            console.log(`📋 Exemples d'offres France Travail:`, 
+                processedJobs.slice(0, 2).map(job => `"${job.title}" chez ${job.company} (score: ${job.matchScore}%)`)
+            );
+
+            return processedJobs;
+
+        } catch (error) {
+            console.error('❌ Erreur France Travail API:', {
+                status: error.response?.status,
+                message: error.message,
+                data: error.response?.data
+            });
+            return [];
+        }
+    }
+
+    // Mapper les types de contrat France Travail
+    mapFranceTravailContract(typeContrat) {
+        const mapping = {
+            'CDI': 'CDI',
+            'CDD': 'CDD',
+            'MIS': 'Intérim',
+            'SAI': 'Alternance',
+            'LIB': 'Libéral',
+            'REP': 'Remplacement',
+            'FRA': 'Franchise'
+        };
+        return mapping[typeContrat] || typeContrat || null;
+    }
+
     // Recherche combinée toutes APIs
     async searchAllSources(alert) {
         console.log(`🔍 Recherche pour l'alerte: ${alert.title}`);
@@ -148,6 +316,9 @@ class JobSearchService {
         
         if (this.apis.jobsearch.enabled) {
             promises.push(this.searchJobTome(alert));
+        }
+        if (this.apis.franceTravail.enabled) {
+            promises.push(this.searchFranceTravail(alert));
         }
 
         try {
@@ -236,6 +407,7 @@ class JobSearchService {
         return {
             adzuna: this.apis.adzuna.enabled,
             jobTome: this.apis.jobsearch.enabled,
+            franceTravail: this.apis.franceTravail.enabled,
             total: Object.values(this.apis).filter(api => api.enabled).length
         };
     }
@@ -262,6 +434,45 @@ class JobSearchService {
             return { 
                 success: true, 
                 message: `Connexion réussie - ${response.data.count || 0} offres disponibles` 
+            };
+        } catch (error) {
+            return { 
+                success: false, 
+                error: error.response?.data?.error || error.message,
+                status: error.response?.status
+            };
+        }
+    }
+
+    // Tester la connexion à France Travail
+    async testFranceTravailConnection() {
+        if (!this.apis.franceTravail.enabled) {
+            return { success: false, error: 'API non configurée' };
+        }
+
+        try {
+            const token = await this.getFranceTravailToken();
+            if (!token) {
+                return { success: false, error: 'Impossible d\'obtenir le token' };
+            }
+
+            const testParams = {
+                motsCles: 'test',
+                range: '0-0' // Juste pour tester
+            };
+
+            const response = await axios.get(this.apis.franceTravail.baseUrl, { 
+                params: testParams,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                },
+                timeout: 10000
+            });
+
+            return { 
+                success: true, 
+                message: `Connexion réussie - ${response.data.filtresPossibles?.nbResultats || 0} offres disponibles` 
             };
         } catch (error) {
             return { 

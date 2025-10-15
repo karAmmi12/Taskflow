@@ -1,12 +1,16 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import useAuthStore from './store/authStore';
+import ProtectedRoute from './components/Auth/ProtectedRoute';
+
+// Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 import Applications from './pages/Applications';
 import JobAlerts from './pages/JobAlerts';
 import JobOffers from './pages/JobOffers';
-import ProtectedRoute from './components/Auth/ProtectedRoute';
-import useAuthStore from './store/authStore';
+import Documents from './pages/Documents';
 
 function App() {
   const { isAuthenticated } = useAuthStore();
@@ -14,11 +18,11 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Redirect root to login or dashboard */}
+        {/* Redirect root to home or login */}
         <Route 
           path="/" 
           element={
-            isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />
+            isAuthenticated ? <Navigate to="/home" replace /> : <Navigate to="/login" replace />
           } 
         />
 
@@ -26,17 +30,25 @@ function App() {
         <Route 
           path="/login" 
           element={
-            isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
+            isAuthenticated ? <Navigate to="/home" replace /> : <Login />
           } 
         />
         <Route 
           path="/register" 
           element={
-            isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
+            isAuthenticated ? <Navigate to="/home" replace /> : <Register />
           } 
         />
 
         {/* Protected routes */}
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/dashboard"
           element={
@@ -69,9 +81,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* 404 */}
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route
+          path="/documents"
+          element={
+            <ProtectedRoute>
+              <Documents />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
   );

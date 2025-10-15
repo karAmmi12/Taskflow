@@ -25,6 +25,11 @@ model User {
   applications  Application[]
   jobAlerts     JobAlert[]
   jobOffers     JobOffer[]
+  profile       UserProfile?        
+  documents     GeneratedDocument[] 
+  
+  @@map("users")
+
 }
 
 model Task {
@@ -126,3 +131,66 @@ model JobAlert {
   @@index([userId])
   @@index([active])
 }
+
+model UserProfile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Informations personnelles
+  phone       String?
+  address     String?
+  linkedin    String?
+  github      String?
+  website     String?
+  summary     String?   // Résumé professionnel
+  
+  // Expériences (JSON)
+  experiences Json[]    @default([])
+  
+  // Formation (JSON)
+  education   Json[]    @default([])
+  
+  // Compétences
+  skills      String[]  @default([])
+  
+  // Langues (JSON avec niveau)
+  languages   Json[]    @default([])
+  
+  // Loisirs/Centres d'intérêt
+  hobbies     String[]  @default([])
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations avec les documents générés
+  documents   GeneratedDocument[]
+}
+
+model GeneratedDocument {
+  id            String      @id @default(uuid())
+  type          String      // 'cv' ou 'cover_letter'
+  filename      String
+  filePath      String
+  latexSource   String?     // Code LaTeX source
+  
+  // Métadonnées
+  template      String?     // Template utilisé
+  options       Json        @default("{}") // Options de génération
+  
+  // Relations
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  userProfileId String?
+  userProfile   UserProfile? @relation(fields: [userProfileId], references: [id])
+  
+  jobOfferId    String?     // Pour les lettres de motivation
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  @@index([userId])
+  @@index([type])
+}
+

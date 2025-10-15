@@ -1,4 +1,4 @@
-import { LogOut, Moon, Sun, CheckSquare, KanbanSquare, Briefcase, Bell, Search} from 'lucide-react';
+import { LogOut, Moon, Sun, CheckSquare, KanbanSquare, Briefcase, Bell, Search, HomeIcon, Home, FileText} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import useAuthStore from '../../store/authStore';
@@ -16,19 +16,24 @@ const Navbar = () => {
     }
   }, []);
 
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    localStorage.setItem('darkMode', newMode);
+  // const toggleDarkMode = () => {
+  //   const newMode = !darkMode;
+  //   setDarkMode(newMode);
+  //   localStorage.setItem('darkMode', newMode);
     
-    if (newMode) {
-      document.body.classList.add('dark');
-    } else {
-      document.body.classList.remove('dark');
-    }
-  };
+  //   if (newMode) {
+  //     document.body.classList.add('dark');
+  //   } else {
+  //     document.body.classList.remove('dark');
+  //   }
+  // };
 
   const navItems = [
+    {
+      name: 'Accueil',
+      path: '/home',
+      icon: Home,
+    },
     {
       name: 'Tâches',
       path: '/dashboard',
@@ -49,6 +54,11 @@ const Navbar = () => {
       path: '/job-offers',
       icon: Search,
     },
+    {
+      name: 'Documents IA',
+      path: '/documents',
+      icon: FileText,
+    }
   ];
 
   return (
@@ -102,7 +112,7 @@ const Navbar = () => {
             </div>
 
             {/* Dark mode toggle */}
-            <button
+            {/* <button
               onClick={toggleDarkMode}
               className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               aria-label="Toggle dark mode"
@@ -112,7 +122,7 @@ const Navbar = () => {
               ) : (
                 <Moon className="w-5 h-5 text-slate-600" />
               )}
-            </button>
+            </button> */}
 
             {/* Logout button */}
             <button

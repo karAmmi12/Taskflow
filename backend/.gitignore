@@ -3,3 +3,21 @@ node_modules
 .env
 
 /generated/prisma
+
+
+/generated/prisma
+
+# 📄 Documents LaTeX générés
+storage/documents/*.pdf
+storage/documents/*.tex
+storage/documents/*.aux
+storage/documents/*.log
+storage/documents/*.fls
+storage/documents/*.fdb_latexmk
+storage/documents/*.synctex.gz
+storage/documents/*.toc
+storage/documents/*.out
+
+# 🗂️ Garder le dossier mais ignorer le contenu
+storage/documents/*
+!storage/documents/.gitkeep

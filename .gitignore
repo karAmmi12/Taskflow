@@ -58,3 +58,17 @@ build
 # OS
 .DS_Store
 Thumbs.db
+
+# 📄 Documents générés (LaTeX/PDF)
+backend/storage/documents/*.pdf
+backend/storage/documents/*.tex
+backend/storage/documents/*.aux
+backend/storage/documents/*.log
+backend/storage/documents/*.fls
+backend/storage/documents/*.fdb_latexmk
+backend/storage/documents/*.synctex.gz
+backend/storage/documents/*.toc
+backend/storage/documents/*.out
+
+# 🗂️ Dossier de stockage complet (optionnel)
+# backend/storage/documents/
