@@ -1,94 +1,40 @@
-const { HfInference } = require('@huggingface/inference');
 const fs = require('fs').promises;
 const fsExtra = require('fs-extra');
 const path = require('path');
 const { exec } = require('child_process');
 const { promisify } = require('util');
+const aiService = require('./aiService');
 
 const execAsync = promisify(exec);
 
 class DocumentGeneratorService {
     constructor() {
-        this.provider = process.env.AI_PROVIDER || 'huggingface';
-        this.storagePath = process.env.DOCUMENTS_STORAGE_PATH || './storage/documents';
-
-        console.log('🔧 Debug Hugging Face:');
-        console.log('   Token configuré:', !!process.env.HUGGINGFACE_API_KEY);
-        console.log('   Provider:', this.provider);
-        console.log('   Storage path:', this.storagePath);
-        
-        // Configuration Hugging Face (GRATUIT) - 🔧 MODÈLE CORRIGÉ
-        if (process.env.HUGGINGFACE_API_KEY) {
-            this.hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
-            // ✅ Utiliser un modèle gratuit et disponible
-            this.model = 'microsoft/DialoGPT-medium'; // Plus petit et disponible
-            console.log('✅ Modèle Hugging Face configuré:', this.model);
-        } else {
-            console.log('❌ Token Hugging Face manquant dans .env');
-        }
+        this.storageDir = process.env.DOCUMENTS_STORAGE_PATH || './storage/documents';
+        this.storagePath = path.resolve(this.storageDir);
         
         this.ensureDirectoryExists();
-        
-        console.log(`🤖 Générateur de documents initialisé avec ${this.provider} (GRATUIT)`);
+        console.log('📄 Service de génération initialisé avec IA Hugging Face');
     }
 
     async ensureDirectoryExists() {
         try {
             await fsExtra.ensureDir(this.storagePath);
-            console.log('✅ Storage directory created/verified:', this.storagePath);
         } catch (error) {
-            console.error('❌ Erreur création dossier:', error);
+            console.error('❌ Erreur création dossier documents:', error);
         }
     }
 
-    // Test de connexion Hugging Face
-    async testHuggingFaceConnection() {
-        if (!process.env.HUGGINGFACE_API_KEY) {
-            return { 
-                success: false, 
-                error: 'Token Hugging Face non configuré' 
-            };
-        }
-
-        try {
-            console.log('🧪 Test de connexion Hugging Face...');
-            
-            // ✅ Utiliser un modèle plus simple et fiable
-            const response = await this.hf.textGeneration({
-                model: 'gpt2', // Modèle de base toujours disponible
-                inputs: "Generate a simple text:",
-                parameters: {
-                    max_new_tokens: 10,
-                    temperature: 0.1
-                }
-            });
-
-            console.log('✅ Test Hugging Face réussi');
-            return { 
-                success: true, 
-                message: 'Connexion réussie à Hugging Face',
-                model: 'gpt2 (fallback)'
-            };
-        } catch (error) {
-            console.error('❌ Erreur test Hugging Face:', error);
-            return { 
-                success: false, 
-                error: error.message || 'Erreur de connexion'
-            };
-        }
+    async testAIConnection() {
+        return await aiService.testConnection();
     }
 
-    // Générer un CV LaTeX avec Hugging Face (GRATUIT)
     async generateCV(userProfile, options = {}) {
         try {
-            console.log('🤖 Génération du CV (Mode Template)...');
-
-            // ✅ Générer directement avec le template personnalisé (plus fiable)
-            const latexContent = this.generatePersonalizedTemplate('cv', userProfile, options);
+            console.log('📄 Génération CV...');
             
+            const latexContent = this.generateCVTemplate(userProfile, options);
             const filename = `cv_${userProfile.id}_${Date.now()}`;
             
-            // Compiler en PDF
             const result = await this.compileToPDF(latexContent, filename);
             
             return {
@@ -97,7 +43,6 @@ class DocumentGeneratorService {
                 path: result.path,
                 latexSource: latexContent
             };
-
         } catch (error) {
             console.error('❌ Erreur génération CV:', error);
             return {
@@ -107,25 +52,47 @@ class DocumentGeneratorService {
         }
     }
 
-    // Générer une lettre de motivation
     async generateCoverLetter(userProfile, jobOffer, options = {}) {
         try {
-            console.log('📝 Génération lettre de motivation (Mode Template)...');
+            console.log('📝 Génération lettre de motivation...');
+            
+            let aiContent = null;
+            let aiGenerated = false;
 
-            const latexContent = this.generatePersonalizedTemplate('cover_letter', userProfile, options, jobOffer);
+            // Tentative de génération avec IA si demandée et disponible
+            if (options.useAI !== false && aiService.isEnabled) {
+                try {
+                    aiContent = await aiService.generateCoverLetterContent(
+                        userProfile,
+                        jobOffer,
+                        options.tone || 'professionnel'
+                    );
+                    aiGenerated = true;
+                    console.log('✅ Contenu IA généré avec succès');
+                } catch (error) {
+                    console.log('⚠️ IA échouée, utilisation template:', error.message);
+                    aiContent = null;
+                }
+            }
+
+            const latexContent = this.generateCoverLetterTemplate(
+                userProfile,
+                jobOffer,
+                options,
+                aiContent
+            );
+
+            const filename = `lettre_${aiGenerated ? 'ia' : 'template'}_${userProfile.id}_${Date.now()}`;
             
-            const filename = `lettre_${userProfile.id}_${Date.now()}`;
-            
-            // Compiler en PDF
             const result = await this.compileToPDF(latexContent, filename);
-            
+
             return {
                 success: true,
                 filename: result.filename,
                 path: result.path,
-                latexSource: latexContent
+                latexSource: latexContent,
+                aiGenerated
             };
-
         } catch (error) {
             console.error('❌ Erreur génération lettre:', error);
             return {
@@ -135,240 +102,70 @@ class DocumentGeneratorService {
         }
     }
 
-    // ✅ Template LaTeX corrigé - SUPPRESSION DE FRANCAIS
-    generatePersonalizedTemplate(type, userProfile, options, jobOffer = null) {
-        const { name, email, phone, address, summary, experiences, education, skills, languages, hobbies } = userProfile;
+    generateCVTemplate(userProfile, options) {
         const user = userProfile.user || {};
+        const { experiences = [], education = [], skills = [] } = userProfile;
         
-        if (type === 'cv') {
-            return `\\documentclass[11pt,a4paper]{article}
-    \\usepackage[utf8]{inputenc}
-    \\usepackage[T1]{fontenc}
-    \\usepackage{geometry}
-    \\usepackage{enumitem}
-    \\usepackage{titlesec}
-    \\usepackage{xcolor}
-    \\geometry{left=2cm,right=2cm,top=2cm,bottom=2cm}
-    \\pagestyle{empty}
-
-    % Couleurs
-    \\definecolor{primary}{RGB}{0, 123, 191}
-    \\definecolor{secondary}{RGB}{108, 117, 125}
-
-    % Titres de sections
-    \\titleformat{\\section}{\\Large\\bfseries\\color{primary}}{}{0em}{}[\\titlerule]
-    \\titlespacing{\\section}{0pt}{12pt}{6pt}
-
-    \\begin{document}
-
-    % En-tête 
-    \\begin{center}
-    {\\Huge\\bfseries\\color{primary} ${this.escapeLatex(user.name || name) || 'Votre Nom'}}\\\\[3mm]
-    {\\large ${this.escapeLatex(summary) || 'Professionnel motive et experimente'}}\\\\[5mm]
-    \\color{secondary}
-    ${this.escapeLatex(email || user.email) || 'votre.email@example.com'} ${phone ? ` • ${this.escapeLatex(phone)}` : ''} ${address ? ` • ${this.escapeLatex(address)}` : ''}
-    \\end{center}
-
-    \\vspace{8mm}
-
-    ${experiences && experiences.length > 0 ? `
-    % Experience Professionnelle
-    \\section{Experience Professionnelle}
-    ${experiences.slice(0, 4).map(exp => `
-    \\textbf{${this.escapeLatex(exp.title) || 'Poste'}} -- \\textit{${this.escapeLatex(exp.company) || 'Entreprise'}} \\hfill ${this.escapeLatex(exp.startDate) || ''} - ${this.escapeLatex(exp.endDate) || 'Present'}\\\\[1mm]
-    ${this.escapeLatex(exp.description) || 'Description des responsabilites et realisations principales.'}\\\\[3mm]
-    `).join('')}
-    ` : `
-    % Experience Professionnelle
-    \\section{Experience Professionnelle}
-    \\textbf{Titre du poste} -- \\textit{Entreprise} \\hfill Dates\\\\[1mm]
-    Description des responsabilites et realisations principales.\\\\[3mm]
-    `}
-
-    ${education && education.length > 0 ? `
-    % Formation
-    \\section{Formation}
-    ${education.slice(0, 3).map(edu => `
-    \\textbf{${this.escapeLatex(edu.degree) || 'Diplome'}} -- \\textit{${this.escapeLatex(edu.school) || 'Ecole'}} \\hfill ${this.escapeLatex(edu.year) || 'Annee'}\\\\[1mm]
-    ${this.escapeLatex(edu.description) || ''}\\\\[2mm]
-    `).join('')}
-    ` : `
-    % Formation
-    \\section{Formation}
-    \\textbf{Diplome} -- \\textit{Ecole} \\hfill Annee\\\\[1mm]
-    Description de la formation.\\\\[2mm]
-    `}
-
-    % Competences
-    \\section{Competences}
-    \\begin{itemize}[leftmargin=15pt, itemsep=1mm]
-    ${skills && skills.length > 0 
-    ? skills.slice(0, 8).map(skill => `\\item ${this.escapeLatex(skill)}`).join('\n')
-    : '\\item Competence 1\n\\item Competence 2\n\\item Competence 3'
-    }
-    \\end{itemize}
-
-    ${languages && languages.length > 0 ? `
-    % Langues
-    \\section{Langues}
-    \\begin{itemize}[leftmargin=15pt, itemsep=1mm]
-    ${languages.slice(0, 4).map(lang => `\\item ${this.escapeLatex(lang.name || lang)} -- ${this.escapeLatex(lang.level) || 'Niveau'}`).join('\n')}
-    \\end{itemize}
-    ` : ''}
-
-    ${hobbies && hobbies.length > 0 ? `
-    % Centres d'interet
-    \\section{Centres d'interet}
-    ${hobbies.slice(0, 6).map(hobby => this.escapeLatex(hobby)).join(' • ')}
-    ` : ''}
-
-    \\end{document}`;
-        }
-
-        if (type === 'cover_letter' && jobOffer) {
-            return `\\documentclass[11pt,a4paper]{letter}
-    \\usepackage[utf8]{inputenc}
-    \\usepackage[T1]{fontenc}
-    \\usepackage{geometry}
-    \\geometry{margin=2.5cm}
-
-    \\begin{document}
-
-    \\begin{flushleft}
-    ${this.escapeLatex(user.name || name) || 'Votre Nom'}\\\\
-    ${this.escapeLatex(address) || 'Votre Adresse'}\\\\
-    ${this.escapeLatex(phone) || 'Telephone'}\\\\
-    ${this.escapeLatex(email || user.email) || 'Email'}
-    \\end{flushleft}
-
-    \\vspace{10mm}
-
-    \\begin{flushleft}
-    ${this.escapeLatex(jobOffer.company) || 'Nom de l\'entreprise'}\\\\
-    Service Ressources Humaines\\\\
-    ${this.escapeLatex(jobOffer.location) || 'Adresse de l\'entreprise'}
-    \\end{flushleft}
-
-    \\vspace{10mm}
-
-    \\textbf{Objet :} Candidature pour le poste de ${this.escapeLatex(jobOffer.title) || 'Titre du poste'}
-
-    \\vspace{5mm}
-
-    Madame, Monsieur,
-
-    Je me permets de vous adresser ma candidature pour le poste de ${this.escapeLatex(jobOffer.title) || 'titre du poste'} au sein de ${this.escapeLatex(jobOffer.company) || 'votre entreprise'}.
-
-    ${summary ? `
-    Fort(e) de mon experience professionnelle, je suis convaincu(e) que mon profil correspond parfaitement aux exigences de ce poste.
-    ` : `
-    Fort(e) de mon experience professionnelle, je suis convaincu(e) que mon profil correspond parfaitement aux exigences de ce poste.
-    `}
-
-    Je serais ravi(e) de pouvoir echanger avec vous sur ma candidature et vous demontrer ma motivation lors d'un entretien.
-
-    Dans l'attente de votre retour, je vous prie d'agreer, Madame, Monsieur, l'expression de mes salutations distinguees.
-
-    \\vspace{10mm}
-
-    ${this.escapeLatex(user.name || name) || 'Votre Nom'}
-
-    \\end{document}`;
-        }
-
-        // Fallback
-        return this.generateFallbackTemplate(type);
-    }
-
-    // ✅ NOUVELLE MÉTHODE: Échapper les caractères spéciaux LaTeX
-    escapeLatex(text) {
-        if (!text) return '';
-        return text.toString()
-            .replace(/\\/g, '\\textbackslash{}')
-            .replace(/\{/g, '\\{')
-            .replace(/\}/g, '\\}')
-            .replace(/\$/g, '\\$')
-            .replace(/&/g, '\\&')
-            .replace(/\%/g, '\\%')
-            .replace(/#/g, '\\#')
-            .replace(/\^/g, '\\textasciicircum{}')
-            .replace(/_/g, '\\_')
-            .replace(/~/g, '\\textasciitilde{}')
-            .replace(/"/g, "''")
-            .replace(/'/g, "'")
-            // Conversion des caractères accentués en safe LaTeX
-            .replace(/é/g, 'e')
-            .replace(/è/g, 'e')
-            .replace(/ê/g, 'e')
-            .replace(/ë/g, 'e')
-            .replace(/à/g, 'a')
-            .replace(/â/g, 'a')
-            .replace(/ä/g, 'a')
-            .replace(/ç/g, 'c')
-            .replace(/ù/g, 'u')
-            .replace(/û/g, 'u')
-            .replace(/ü/g, 'u')
-            .replace(/î/g, 'i')
-            .replace(/ï/g, 'i')
-            .replace(/ô/g, 'o')
-            .replace(/ö/g, 'o')
-            .replace(/ÿ/g, 'y')
-            // Majuscules
-            .replace(/É/g, 'E')
-            .replace(/È/g, 'E')
-            .replace(/Ê/g, 'E')
-            .replace(/À/g, 'A')
-            .replace(/Â/g, 'A')
-            .replace(/Ç/g, 'C')
-            .replace(/Ù/g, 'U')
-            .replace(/Û/g, 'U')
-            .replace(/Î/g, 'I')
-            .replace(/Ô/g, 'O');
-    }
-
-    // Template de secours si nécessaire
-    generateFallbackTemplate(documentType) {
-        const templates = {
-            cv: `\\documentclass[11pt,a4paper]{article}
+        return `\\documentclass[11pt,a4paper]{article}
 \\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
 \\usepackage[french]{babel}
 \\usepackage{geometry}
+\\usepackage{xcolor}
+\\usepackage{enumitem}
+\\usepackage{titlesec}
+
 \\geometry{margin=2cm}
-\\pagestyle{empty}
+\\definecolor{primary}{RGB}{30,58,138}
+\\definecolor{secondary}{RGB}{100,116,139}
+
+\\titleformat{\\section}{\\Large\\bfseries\\color{primary}}{}{0em}{}[\\color{primary}\\titlerule]
+\\titlespacing{\\section}{0pt}{12pt}{6pt}
 
 \\begin{document}
 
 \\begin{center}
-{\\Large \\textbf{[VOTRE NOM]}}\\\\
-[2mm]
-[Votre email] \\textbar{} [Votre téléphone]\\\\
-[Votre adresse]
+{\\Huge\\bfseries\\color{primary} ${this.escapeLatex(user.name || 'Nom Prénom')}}\\\\[3mm]
+{\\large ${this.escapeLatex(userProfile.summary || 'Professionnel motivé')}}\\\\[5mm]
+\\color{secondary}
+${this.escapeLatex(user.email || 'email@example.com')} ${userProfile.phone ? ` • ${this.escapeLatex(userProfile.phone)}` : ''} ${userProfile.address ? ` • ${this.escapeLatex(userProfile.address)}` : ''}
 \\end{center}
 
-\\vspace{5mm}
+\\vspace{8mm}
 
-\\section*{Expérience Professionnelle}
-\\textbf{[Titre du poste]} -- [Entreprise] \\hfill [Dates]\\\\
-[Description des responsabilités]
+${experiences.length > 0 ? `
+\\section{Expérience Professionnelle}
+${experiences.slice(0, 5).map(exp => `
+\\textbf{${this.escapeLatex(exp.title || 'Poste')}} -- \\textit{${this.escapeLatex(exp.company || 'Entreprise')}} \\hfill ${this.escapeLatex(exp.startDate || '')} - ${this.escapeLatex(exp.endDate || 'Présent')}\\\\[1mm]
+${this.escapeLatex(exp.description || 'Description des responsabilités principales.')}\\\\[3mm]
+`).join('')}
+` : ''}
 
-\\vspace{3mm}
+${education.length > 0 ? `
+\\section{Formation}
+${education.slice(0, 3).map(edu => `
+\\textbf{${this.escapeLatex(edu.degree || 'Diplôme')}} -- \\textit{${this.escapeLatex(edu.institution || 'Institution')}} \\hfill ${this.escapeLatex(edu.year || '')}\\\\[2mm]
+`).join('')}
+` : ''}
 
-\\section*{Formation}
-\\textbf{[Diplôme]} -- [École] \\hfill [Année]
-
-\\vspace{3mm}
-
-\\section*{Compétences}
-\\begin{itemize}
-\\item [Compétence 1]
-\\item [Compétence 2]
-\\item [Compétence 3]
+${skills.length > 0 ? `
+\\section{Compétences}
+\\begin{itemize}[leftmargin=15pt, itemsep=1mm]
+${skills.slice(0, 10).map(skill => `\\item ${this.escapeLatex(skill)}`).join('\n')}
 \\end{itemize}
+` : ''}
 
-\\end{document}`,
+\\end{document}`;
+    }
 
-            cover_letter: `\\documentclass[11pt,a4paper]{letter}
+    generateCoverLetterTemplate(userProfile, jobOffer, options, aiContent) {
+        const user = userProfile.user || {};
+        
+        // Utiliser le contenu IA ou un contenu par défaut
+        const motivationContent = aiContent || 
+            `Fort(e) de mon expérience et de mes compétences, je suis convaincu(e) que mon profil correspond parfaitement aux exigences du poste de ${jobOffer.title}. Je serais ravi(e) de pouvoir contribuer au succès de ${jobOffer.company} et d'apporter ma motivation à votre équipe dynamique.`;
+
+        return `\\documentclass[11pt,a4paper]{letter}
 \\usepackage[utf8]{inputenc}
 \\usepackage[T1]{fontenc}
 \\usepackage[french]{babel}
@@ -378,143 +175,118 @@ class DocumentGeneratorService {
 \\begin{document}
 
 \\begin{flushleft}
-[Votre nom]\\\\
-[Votre adresse]\\\\
-[Téléphone]\\\\
-[Email]
+${this.escapeLatex(user.name || 'Votre Nom')}\\\\
+${this.escapeLatex(userProfile.address || 'Votre Adresse')}\\\\
+${this.escapeLatex(userProfile.phone || 'Téléphone')}\\\\
+${this.escapeLatex(user.email || 'Email')}
 \\end{flushleft}
 
 \\vspace{10mm}
 
 \\begin{flushleft}
-[Nom de l'entreprise]\\\\
-[Adresse de l'entreprise]
+${this.escapeLatex(jobOffer.company)}\\\\
+Service Ressources Humaines\\\\
+${this.escapeLatex(jobOffer.location || '')}
 \\end{flushleft}
 
 \\vspace{10mm}
 
-\\textbf{Objet :} Candidature pour le poste de [Titre du poste]
+\\textbf{Objet :} Candidature pour le poste de ${this.escapeLatex(jobOffer.title)}
 
 \\vspace{5mm}
 
 Madame, Monsieur,
 
-Je me permets de vous adresser ma candidature pour le poste de [titre du poste] au sein de votre entreprise.
+\\vspace{5mm}
 
-[Votre motivation et expérience]
+${this.escapeLatex(motivationContent)}
+
+\\vspace{5mm}
 
 Dans l'attente de votre retour, je vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.
 
 \\vspace{10mm}
 
-[Votre nom]
+${this.escapeLatex(user.name || 'Votre Nom')}
 
-\\end{document}`
-        };
-
-        return templates[documentType] || templates.cv;
+\\end{document}`;
     }
 
-    // Compiler LaTeX en PDF
-    async compileToPDF(latexContent, filename) {
-        const texFilename = `${filename}.tex`;
-        const pdfFilename = `${filename}.pdf`;
-        const texPath = path.join(this.storagePath, texFilename);
-        const pdfPath = path.join(this.storagePath, pdfFilename);
+    escapeLatex(text) {
+        if (!text) return '';
+        return text.toString()
+            .replace(/\\/g, '\\textbackslash{}')
+            .replace(/\{/g, '\\{')
+            .replace(/\}/g, '\\}')
+            .replace(/\$/g, '\\$')
+            .replace(/&/g, '\\&')
+            .replace(/%/g, '\\%')
+            .replace(/#/g, '\\#')
+            .replace(/\^/g, '\\textasciicircum{}')
+            .replace(/_/g, '\\_')
+            .replace(/~/g, '\\textasciitilde{}')
+            .replace(/'/g, "'");
+    }
 
+    async compileToPDF(latexContent, filename) {
+        const tempDir = path.join(this.storagePath, 'temp');
+        await fsExtra.ensureDir(tempDir);
+        
+        const texFile = path.join(tempDir, `${filename}.tex`);
+        const pdfFile = path.join(this.storagePath, `${filename}.pdf`);
+        
         try {
             // Écrire le fichier LaTeX
-            await fs.writeFile(texPath, latexContent, 'utf8');
-            console.log('📝 Fichier LaTeX créé:', texPath);
-
-            // Compiler avec pdflatex - 🔧 GESTION AMÉLIORÉE DES ERREURS
-            console.log('🔧 Compilation LaTeX en cours...');
+            await fs.writeFile(texFile, latexContent, 'utf8');
             
-            let compilationResult;
-            try {
-                compilationResult = await execAsync(`cd "${this.storagePath}" && pdflatex -interaction=nonstopmode "${texFilename}"`, {
-                    timeout: 30000
-                });
-                console.log('📤 LaTeX compilation stdout:', compilationResult.stdout);
-            } catch (compileError) {
-                // 🔧 NE PAS TRAITER COMME UNE ERREUR FATALE
-                console.log('⚠️ LaTeX compilation warnings (normal):', compileError.stdout);
-                if (compileError.stderr) {
-                    console.log('⚠️ LaTeX stderr:', compileError.stderr);
-                }
-            }
-
-            // Vérifier que le PDF existe (IMPORTANT: toujours vérifier même avec des warnings)
-            const pdfExists = await fs.access(pdfPath).then(() => true).catch(() => false);
-            console.log('🔍 Vérification PDF existence:', pdfExists ? '✅ EXISTS' : '❌ NOT FOUND');
+            // Compiler en PDF
+            const command = `pdflatex -interaction=nonstopmode -output-directory="${this.storagePath}" "${texFile}"`;
+            await execAsync(command);
             
-            if (pdfExists) {
-                console.log('✅ PDF généré avec succès:', pdfPath);
-                
-                // 🧹 Nettoyer les fichiers temporaires
-                await this.cleanTempFiles(filename);
-                
-                return {
-                    filename: pdfFilename,
-                    path: pdfPath
-                };
-            } else {
-                // 🔧 DIAGNOSTIC: Lister les fichiers pour debug
-                try {
-                    const files = await fs.readdir(this.storagePath);
-                    const relatedFiles = files.filter(f => f.includes(filename.split('_')[1]) || f.includes(filename));
-                    console.log('📁 Fichiers présents dans storage:', relatedFiles);
-                } catch (listError) {
-                    console.log('❌ Erreur lecture dossier:', listError.message);
-                }
-                
-                throw new Error('Le fichier PDF n\'a pas été généré malgré la compilation');
+            // Vérifier que le PDF existe
+            const pdfExists = await fs.access(pdfFile).then(() => true).catch(() => false);
+            if (!pdfExists) {
+                throw new Error('Le fichier PDF n\'a pas été généré');
             }
-
+            
+            // Nettoyer les fichiers temporaires
+            await this.cleanTempFiles(filename);
+            
+            return {
+                filename: `${filename}.pdf`,
+                path: pdfFile
+            };
         } catch (error) {
-            console.error('❌ Erreur compilation LaTeX:', error);
-            throw new Error(`Compilation LaTeX: ${error.message}`);
+            await this.cleanTempFiles(filename);
+            throw new Error(`Erreur compilation LaTeX: ${error.message}`);
         }
     }
 
-    // méthode de nettoyage des fichiers temporaires
     async cleanTempFiles(filename) {
-        const tempExtensions = ['.aux', '.log', '.fls', '.fdb_latexmk', '.synctex.gz', '.toc', '.out'];
-        
-        for (const ext of tempExtensions) {
-            const tempFile = path.join(this.storagePath, `${filename}${ext}`);
+        const extensions = ['.aux', '.log', '.tex', '.out', '.fls', '.fdb_latexmk'];
+        for (const ext of extensions) {
             try {
-                await fs.unlink(tempFile);
-                console.log(`🗑️ Fichier temporaire supprimé: ${filename}${ext}`);
+                const file = path.join(this.storagePath, `${filename}${ext}`);
+                await fs.unlink(file);
             } catch (error) {
-                // Fichier n'existe pas, ignorer
+                // Ignorer les erreurs de nettoyage
             }
         }
+        
+        // Nettoyer le dossier temp
+        try {
+            const tempDir = path.join(this.storagePath, 'temp');
+            await fsExtra.remove(tempDir);
+        } catch (error) {
+            // Ignorer
+        }
     }
 
-    // Templates prédéfinis disponibles
     getAvailableTemplates() {
         return [
-            {
-                id: 'moderne',
-                name: 'Moderne',
-                description: 'Design contemporain avec couleurs'
-            },
-            {
-                id: 'classique',
-                name: 'Classique', 
-                description: 'Style traditionnel et sobre'
-            },
-            {
-                id: 'simple',
-                name: 'Simple',
-                description: 'Template minimaliste et épuré'
-            },
-            {
-                id: 'professionnel',
-                name: 'Professionnel',
-                description: 'Style corporate et élégant'
-            }
+            { id: 'modern', name: 'Moderne', description: 'Design contemporain avec couleurs' },
+            { id: 'classic', name: 'Classique', description: 'Style traditionnel et sobre' },
+            { id: 'minimal', name: 'Minimal', description: 'Template épuré et élégant' }
         ];
     }
 }

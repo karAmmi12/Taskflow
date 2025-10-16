@@ -1,85 +1,32 @@
 const { PrismaClient } = require("@prisma/client");
 const documentGenerator = require('../services/documentGeneratorService');
-const path = require('path');
 const fs = require('fs');
 
 const prisma = new PrismaClient();
 
-// Test de connexion IA gratuite
 const testAIConnection = async (req, res) => {
     try {
-        console.log('🔧 Test IA connection called by user:', req.userId);
-        const result = await documentGenerator.testHuggingFaceConnection();
+        console.log('🔧 Test connexion IA Hugging Face...');
+        const result = await documentGenerator.testAIConnection();
         
         res.json({
-            provider: 'Hugging Face (GRATUIT)',
-            ...result
+            ...result,
+            provider: 'Hugging Face (GRATUIT)'
         });
     } catch (error) {
-        console.error('❌ Error in testAIConnection:', error);
-        res.status(500).json({ error: 'Erreur test connexion IA', details: error.message });
-    }
-};
-
-// Lister les documents - 🔧 AVEC GESTION D'ERREURS AMÉLIORÉE
-const getDocuments = async (req, res) => {
-    try {
-        console.log('📄 getDocuments called by user:', req.userId);
-        
-        // Vérifier si userId existe (du middleware auth)
-        if (!req.userId) {
-            console.error('❌ No userId found in request');
-            return res.status(401).json({ error: 'Utilisateur non authentifié' });
-        }
-
-        const { type } = req.query;
-        
-        const filters = { userId: req.userId };
-        if (type) filters.type = type;
-
-        console.log('🔍 Searching documents with filters:', filters);
-
-        const documents = await prisma.generatedDocument.findMany({
-            where: filters,
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                type: true,
-                filename: true,
-                template: true,
-                createdAt: true,
-                options: true
-            }
-        });
-
-        console.log(`✅ Found ${documents.length} documents for user ${req.userId}`);
-        
-        res.json({ 
-            documents,
-            count: documents.length,
-            userId: req.userId // Pour debug
-        });
-
-    } catch (error) {
-        console.error("❌ Error in getDocuments:", error);
-        console.error("Error details:", {
-            name: error.name,
-            message: error.message,
-            stack: error.stack
-        });
-        
-        res.status(500).json({ 
-            error: "Erreur lors de la récupération des documents",
+        console.error('❌ Erreur test IA:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Erreur test connexion IA',
             details: error.message,
-            userId: req.userId || 'undefined'
+            provider: 'Hugging Face'
         });
     }
 };
 
-// Générer un CV
 const generateCV = async (req, res) => {
     try {
-        console.log('🤖 generateCV called by user:', req.userId);
+        console.log('📄 Génération CV pour utilisateur:', req.userId);
         
         const { templateId, options = {} } = req.body;
         
@@ -90,19 +37,12 @@ const generateCV = async (req, res) => {
 
         if (!userProfile) {
             return res.status(404).json({
-                error: "Profil utilisateur non trouvé. Veuillez d'abord créer votre profil."
+                error: "Profil utilisateur non trouvé. Créez d'abord votre profil."
             });
         }
 
-        const enrichedProfile = {
-            ...userProfile,
-            name: userProfile.user.name,
-            email: userProfile.user.email,
-            id: req.userId
-        };
-
-        const result = await documentGenerator.generateCV(enrichedProfile, {
-            style: templateId || 'simple',
+        const result = await documentGenerator.generateCV(userProfile, {
+            style: templateId || 'modern',
             ...options
         });
 
@@ -119,38 +59,37 @@ const generateCV = async (req, res) => {
                 filename: result.filename,
                 filePath: result.path,
                 latexSource: result.latexSource,
-                template: templateId || 'simple',
-                options: { ...options, provider: 'huggingface' },
+                template: templateId || 'modern',
+                options: { ...options, provider: 'latex_template' },
                 userId: req.userId,
                 userProfileId: userProfile.id
             }
         });
 
         res.json({
-            message: 'CV généré avec succès (IA gratuite)',
+            message: 'CV généré avec succès',
             document: {
                 id: document.id,
                 filename: document.filename,
                 downloadUrl: `/api/documents/download/${document.id}`,
-                provider: 'Hugging Face (GRATUIT)'
+                provider: 'Template LaTeX (GRATUIT)'
             }
         });
 
     } catch (error) {
-        console.error("❌ Error in generateCV:", error);
-        res.status(500).json({ 
+        console.error("❌ Erreur génération CV:", error);
+        res.status(500).json({
             error: "Erreur lors de la génération du CV",
             details: error.message
         });
     }
 };
 
-// Générer une lettre de motivation
 const generateCoverLetter = async (req, res) => {
     try {
-        console.log('📝 generateCoverLetter called by user:', req.userId);
+        console.log('📝 Génération lettre pour utilisateur:', req.userId);
         
-        const { jobOfferId, options = {} } = req.body;
+        const { jobOffer, options = {} } = req.body;
         
         const userProfile = await prisma.userProfile.findFirst({
             where: { userId: req.userId },
@@ -159,30 +98,19 @@ const generateCoverLetter = async (req, res) => {
 
         if (!userProfile) {
             return res.status(404).json({
-                error: "Profil utilisateur non trouvé"
+                error: "Profil utilisateur non trouvé. Créez d'abord votre profil."
             });
         }
 
-        const jobOffer = await prisma.jobOffer.findFirst({
-            where: { id: jobOfferId, userId: req.userId }
-        });
-
-        if (!jobOffer) {
-            return res.status(404).json({
-                error: "Offre d'emploi non trouvée"
+        if (!jobOffer || !jobOffer.title || !jobOffer.company) {
+            return res.status(400).json({
+                error: "Informations de l'offre incomplètes (titre et entreprise requis)"
             });
         }
-
-        const enrichedProfile = {
-            ...userProfile,
-            name: userProfile.user.name,
-            email: userProfile.user.email,
-            id: req.userId
-        };
 
         const result = await documentGenerator.generateCoverLetter(
-            enrichedProfile, 
-            jobOffer, 
+            userProfile,
+            jobOffer,
             options
         );
 
@@ -199,33 +127,52 @@ const generateCoverLetter = async (req, res) => {
                 filename: result.filename,
                 filePath: result.path,
                 latexSource: result.latexSource,
-                template: 'standard',
-                options: { ...options, provider: 'huggingface' },
+                template: result.aiGenerated ? 'ai_enhanced' : 'standard_template',
+                options: { 
+                    ...options, 
+                    aiGenerated: result.aiGenerated,
+                    provider: result.aiGenerated ? 'huggingface' : 'latex_template'
+                },
                 userId: req.userId,
-                userProfileId: userProfile.id,
-                jobOfferId
+                userProfileId: userProfile.id
             }
         });
 
+        const method = result.aiGenerated ? 'avec IA Hugging Face' : 'avec template';
         res.json({
-            message: 'Lettre de motivation générée avec succès',
+            message: `Lettre générée avec succès ${method}`,
             document: {
                 id: document.id,
                 filename: document.filename,
-                downloadUrl: `/api/documents/download/${document.id}`
+                downloadUrl: `/api/documents/download/${document.id}`,
+                aiGenerated: result.aiGenerated,
+                provider: result.aiGenerated ? 'IA Hugging Face (GRATUIT)' : 'Template LaTeX (GRATUIT)'
             }
         });
 
     } catch (error) {
-        console.error("❌ Error in generateCoverLetter:", error);
-        res.status(500).json({ 
+        console.error("❌ Erreur génération lettre:", error);
+        res.status(500).json({
             error: "Erreur lors de la génération de la lettre",
             details: error.message
         });
     }
 };
 
-// Télécharger un document
+const getDocuments = async (req, res) => {
+    try {
+        const documents = await prisma.generatedDocument.findMany({
+            where: { userId: req.userId },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({ documents });
+    } catch (error) {
+        console.error("❌ Erreur récupération documents:", error);
+        res.status(500).json({ error: "Erreur lors de la récupération des documents" });
+    }
+};
+
 const downloadDocument = async (req, res) => {
     try {
         const { id } = req.params;
@@ -238,40 +185,17 @@ const downloadDocument = async (req, res) => {
             return res.status(404).json({ error: "Document non trouvé" });
         }
 
-        const filePath = document.filePath;
-        
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: "Fichier non trouvé sur le serveur" });
+        if (!fs.existsSync(document.filePath)) {
+            return res.status(404).json({ error: "Fichier non trouvé" });
         }
 
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
-        
-        const fileStream = fs.createReadStream(filePath);
-        fileStream.pipe(res);
-
+        res.download(document.filePath, document.filename);
     } catch (error) {
-        console.error("Erreur téléchargement:", error);
+        console.error("❌ Erreur téléchargement:", error);
         res.status(500).json({ error: "Erreur lors du téléchargement" });
     }
 };
 
-// Obtenir les templates
-const getTemplates = async (req, res) => {
-    try {
-        console.log('📋 getTemplates called by user:', req.userId);
-        const templates = documentGenerator.getAvailableTemplates();
-        res.json({ templates });
-    } catch (error) {
-        console.error("❌ Error in getTemplates:", error);
-        res.status(500).json({ 
-            error: "Erreur lors de la récupération des templates",
-            details: error.message
-        });
-    }
-};
-
-// Supprimer un document
 const deleteDocument = async (req, res) => {
     try {
         const { id } = req.params;
@@ -284,6 +208,7 @@ const deleteDocument = async (req, res) => {
             return res.status(404).json({ error: "Document non trouvé" });
         }
 
+        // Supprimer le fichier
         try {
             if (fs.existsSync(document.filePath)) {
                 fs.unlinkSync(document.filePath);
@@ -292,15 +217,28 @@ const deleteDocument = async (req, res) => {
             console.error("Erreur suppression fichier:", error);
         }
 
+        // Supprimer l'enregistrement
         await prisma.generatedDocument.delete({
             where: { id }
         });
 
         res.json({ message: "Document supprimé avec succès" });
-
     } catch (error) {
-        console.error("Erreur suppression document:", error);
+        console.error("❌ Erreur suppression:", error);
         res.status(500).json({ error: "Erreur lors de la suppression" });
+    }
+};
+
+const getTemplates = async (req, res) => {
+    try {
+        const templates = documentGenerator.getAvailableTemplates();
+        res.json({ templates });
+    } catch (error) {
+        console.error("❌ Erreur templates:", error);
+        res.status(500).json({
+            error: "Erreur récupération templates",
+            details: error.message
+        });
     }
 };
 
