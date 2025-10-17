@@ -121,6 +121,34 @@ const Documents = () => {
     }
   };
 
+  const downloadDocumentSecure = async (documentId, filename) => {
+    try {
+      const response = await fetch(`/api/documents/download/${documentId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Erreur téléchargement');
+      }
+    } catch (error) {
+      console.error('Erreur téléchargement:', error);
+      alert(`❌ Erreur lors du téléchargement: ${error.message}`);
+    }
+  };
+
   const deleteDocument = async (id) => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
 
@@ -197,7 +225,6 @@ const Documents = () => {
             </div>
             <div className="flex items-center space-x-2 px-3 py-2 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-lg">
               <Zap className="w-4 h-4" />
-              <span className="text-sm font-medium">100% GRATUIT</span>
             </div>
           </div>
 
@@ -348,9 +375,6 @@ const Documents = () => {
                                 <span>•</span>
                                 <span>{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</span>
                                 <span>•</span>
-                                <span className="bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded">
-                                  GRATUIT
-                                </span>
                                 {doc.options?.aiGenerated && (
                                   <>
                                     <span>•</span>
@@ -364,7 +388,7 @@ const Documents = () => {
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => window.open(`/api/documents/download/${doc.id}`, '_blank')}
+                              onClick={() => downloadDocumentSecure(doc.id, doc.filename)}
                               className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
                               title="Télécharger"
                             >
@@ -526,9 +550,6 @@ const Documents = () => {
                 )}
                 <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
                   <p><strong>Sélection automatique :</strong> Choisissez une offre de votre liste pour une génération rapide</p>
-                </div>
-                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <p><strong>100% Gratuit :</strong> Aucun coût, génération illimitée</p>
                 </div>
               </div>
             </div>

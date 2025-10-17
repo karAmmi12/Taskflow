@@ -14,7 +14,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@huggingface/inference": "^4.11.2",
+    "@huggingface/inference": "^4.11.3",
     "@prisma/client": "^6.17.0",
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",

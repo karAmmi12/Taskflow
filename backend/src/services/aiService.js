@@ -5,14 +5,27 @@ class AIService {
         this.hf = null;
         this.isEnabled = false;
         this.activeModel = null;
+        this.activeProvider = null;
         this.cache = new Map();
         
-        // Modèles optimisés pour la génération de texte professionnel
-        this.models = [
-            'microsoft/DialoGPT-medium',
-            'gpt2-medium',
-            'distilgpt2',
-            'facebook/blenderbot-400M-distill'
+        // Configuration des providers et modèles disponibles
+        this.providers = [
+            {
+                name: 'novita',
+                models: [
+                    'zai-org/GLM-4.6',
+                    'meta-llama/Llama-3.1-8B-Instruct',
+                    'microsoft/DialoGPT-medium'
+                ]
+            },
+            {
+                name: 'huggingface',
+                models: [
+                    'microsoft/DialoGPT-small',
+                    'distilgpt2',
+                    'gpt2'
+                ]
+            }
         ];
         
         this.initialize();
@@ -30,59 +43,96 @@ class AIService {
             this.hf = new HfInference(apiKey);
             console.log('🔧 Initialisation IA Hugging Face...');
             
-            // Tester les modèles disponibles
-            await this.findWorkingModel();
+            // Tester les providers et modèles disponibles
+            await this.findWorkingProvider();
             
         } catch (error) {
             console.error('❌ Erreur initialisation IA:', error.message);
         }
     }
 
-    async findWorkingModel() {
-        console.log('🔍 Recherche d\'un modèle IA fonctionnel...');
+    async findWorkingProvider() {
+        console.log('🔍 Recherche d\'un provider et modèle fonctionnel...');
         
-        for (const model of this.models) {
-            try {
-                console.log(`🧪 Test du modèle: ${model}`);
-                
-                const response = await Promise.race([
-                    this.hf.textGeneration({
-                        model,
-                        inputs: "Bonjour, je suis",
-                        parameters: {
-                            max_new_tokens: 15,
-                            temperature: 0.7,
-                            do_sample: true,
-                            return_full_text: false
-                        }
-                    }),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Timeout')), 10000)
-                    )
-                ]);
+        // Tester d'abord le provider Novita (le plus fiable)
+        for (const provider of this.providers) {
+            console.log(`🧪 Test du provider: ${provider.name}`);
+            
+            for (const model of provider.models) {
+                try {
+                    console.log(`   🔍 Test du modèle: ${model}`);
+                    
+                    let response;
+                    
+                    if (provider.name === 'novita') {
+                        // Utiliser la nouvelle API avec provider
+                        response = await Promise.race([
+                            this.hf.chatCompletion({
+                                provider: "novita",
+                                model: model,
+                                messages: [
+                                    {
+                                        role: "user",
+                                        content: "Write one professional sentence for a job application in French."
+                                    }
+                                ],
+                                max_tokens: 50,
+                                temperature: 0.7
+                            }),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Timeout')), 15000)
+                            )
+                        ]);
+                    } else {
+                        // Utiliser l'API text generation classique
+                        response = await Promise.race([
+                            this.hf.textGeneration({
+                                model: model,
+                                inputs: "Écrivez une phrase professionnelle de motivation:",
+                                parameters: {
+                                    max_new_tokens: 30,
+                                    temperature: 0.7,
+                                    do_sample: true,
+                                    return_full_text: false
+                                }
+                            }),
+                            new Promise((_, reject) => 
+                                setTimeout(() => reject(new Error('Timeout')), 15000)
+                            )
+                        ]);
+                    }
 
-                if (response && response.generated_text) {
-                    const text = response.generated_text.trim();
-                    if (text.length > 5) {
+                    // Vérifier la réponse
+                    let generatedText = '';
+                    if (response?.choices?.[0]?.message?.content) {
+                        generatedText = response.choices[0].message.content;
+                    } else if (response?.generated_text) {
+                        generatedText = response.generated_text;
+                    }
+
+                    if (generatedText && generatedText.trim().length > 15) {
+                        this.activeProvider = provider.name;
                         this.activeModel = model;
                         this.isEnabled = true;
+                        console.log(`✅ Provider actif: ${provider.name}`);
                         console.log(`✅ Modèle actif: ${model}`);
-                        console.log(`📝 Test: "Bonjour, je suis${text}"`);
+                        console.log(`📝 Test réussi: "${generatedText.substring(0, 60)}..."`);
                         return;
                     }
+                    
+                } catch (error) {
+                    console.log(`   ❌ ${model}: ${error.message}`);
+                    continue;
                 }
-            } catch (error) {
-                console.log(`❌ ${model}: ${error.message}`);
-                continue;
             }
         }
         
-        console.log('⚠️ Aucun modèle IA disponible - mode templates uniquement');
+        console.log('⚠️ Aucun provider/modèle IA disponible - mode templates uniquement');
     }
 
     async generateCoverLetterContent(userProfile, jobOffer, tone = 'professionnel') {
         if (!this.isEnabled) {
-            throw new Error('IA non disponible');
+            throw new Error('IA non disponible - Aucun provider fonctionnel');
         }
 
         const cacheKey = `cover_${userProfile.id}_${jobOffer.title}_${tone}`;
@@ -95,24 +145,55 @@ class AIService {
             const prompt = this.buildCoverLetterPrompt(userProfile, jobOffer, tone);
             console.log('🤖 Génération contenu IA...');
             
-            const response = await Promise.race([
-                this.hf.textGeneration({
-                    model: this.activeModel,
-                    inputs: prompt,
-                    parameters: {
-                        max_new_tokens: 120,
+            let response;
+            
+            if (this.activeProvider === 'novita') {
+                // Utiliser Chat Completion avec Novita
+                response = await Promise.race([
+                    this.hf.chatCompletion({
+                        provider: "novita",
+                        model: this.activeModel,
+                        messages: [
+                            {
+                                role: "system",
+                                content: "Tu es un assistant spécialisé dans la rédaction de lettres de motivation professionnelles en français. Réponds uniquement avec le contenu demandé, sans introduction ni explication."
+                            },
+                            {
+                                role: "user",
+                                content: prompt
+                            }
+                        ],
+                        max_tokens: 150,
                         temperature: 0.8,
-                        top_p: 0.9,
-                        repetition_penalty: 1.2,
-                        do_sample: true,
-                        return_full_text: false,
-                        stop: ['\n\n', 'Cordialement', 'Salutations', 'Madame', 'Monsieur']
-                    }
-                }),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Timeout génération IA')), 15000)
-                )
-            ]);
+                        top_p: 0.9
+                    }),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout génération IA')), 25000)
+                    )
+                ]);
+                
+                console.log('📝 Réponse Novita reçue');
+            } else {
+                // Utiliser Text Generation classique
+                response = await Promise.race([
+                    this.hf.textGeneration({
+                        model: this.activeModel,
+                        inputs: prompt,
+                        parameters: {
+                            max_new_tokens: 100,
+                            temperature: 0.8,
+                            top_p: 0.9,
+                            repetition_penalty: 1.1,
+                            do_sample: true,
+                            return_full_text: false,
+                            stop: ['\n\n', 'Cordialement', 'Salutations']
+                        }
+                    }),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Timeout génération IA')), 20000)
+                    )
+                ]);
+            }
 
             let content = this.extractContent(response);
             content = this.cleanAndValidateContent(content, jobOffer);
@@ -138,20 +219,20 @@ class AIService {
         const experiences = userProfile.experiences || [];
         const skills = userProfile.skills || [];
         
-        // Instructions de ton
+        // Instructions de ton en français
         let toneInstruction = '';
         switch (tone) {
             case 'dynamique':
-                toneInstruction = 'Ton énergique et enthousiaste.';
+                toneInstruction = 'Utilise un ton énergique et enthousiaste.';
                 break;
             case 'créatif':
-                toneInstruction = 'Ton original et créatif.';
+                toneInstruction = 'Sois créatif et original.';
                 break;
             case 'formel':
-                toneInstruction = 'Ton très formel et respectueux.';
+                toneInstruction = 'Utilise un ton très formel et respectueux.';
                 break;
             default:
-                toneInstruction = 'Ton professionnel et courtois.';
+                toneInstruction = 'Utilise un ton professionnel et courtois.';
         }
 
         const experienceText = experiences.length > 0 
@@ -162,7 +243,8 @@ class AIService {
             ? skills.slice(0, 5).join(', ')
             : 'compétences en développement';
 
-        return `Rédigez un paragraphe de motivation professionnelle de 2-3 phrases pour une lettre de motivation.
+        // Prompt optimisé en français pour Novita
+        return `Rédigez un paragraphe de motivation de 2-3 phrases pour une lettre de candidature.
 
 Candidat: ${user.name || 'Candidat'}
 Expérience: ${experienceText}
@@ -170,7 +252,7 @@ Compétences: ${skillsText}
 Poste visé: ${jobOffer.title}
 Entreprise: ${jobOffer.company}
 
-${toneInstruction} Mettez en avant l'adéquation entre le profil et le poste.
+Instructions: ${toneInstruction} Écris uniquement le paragraphe de motivation, pas la lettre complète. Concentre-toi sur pourquoi le candidat est parfait pour ce poste.
 
 Paragraphe de motivation:`;
     }
@@ -179,11 +261,21 @@ Paragraphe de motivation:`;
         if (!response) return '';
         
         let content = '';
-        if (response.generated_text) {
+        
+        // Réponse Chat Completion (Novita)
+        if (response.choices?.[0]?.message?.content) {
+            content = response.choices[0].message.content;
+        }
+        // Réponse Text Generation classique
+        else if (response.generated_text) {
             content = response.generated_text;
-        } else if (Array.isArray(response) && response[0]?.generated_text) {
+        }
+        // Réponse en tableau
+        else if (Array.isArray(response) && response[0]?.generated_text) {
             content = response[0].generated_text;
-        } else if (typeof response === 'string') {
+        }
+        // Réponse string directe
+        else if (typeof response === 'string') {
             content = response;
         }
         
@@ -191,9 +283,15 @@ Paragraphe de motivation:`;
     }
 
     cleanAndValidateContent(content, jobOffer) {
-        if (!content || content.length < 10) {
-            // Fallback si le contenu est trop court
-            return `Mon expérience et mes compétences correspondent parfaitement aux exigences du poste de ${jobOffer.title}. Je suis très motivé(e) à rejoindre ${jobOffer.company} et à contribuer activement à ses projets. Mon profil apportera une réelle valeur ajoutée à votre équipe.`;
+        if (!content || content.length < 20) {
+            // Fallback de qualité en français
+            const fallbacks = [
+                `Mon expérience et mes compétences correspondent parfaitement aux exigences du poste de ${jobOffer.title}. Je suis très motivé(e) à rejoindre ${jobOffer.company} et à contribuer activement à ses projets.`,
+                `Fort(e) de mon parcours, je suis convaincu(e) d'être le candidat idéal pour le poste de ${jobOffer.title} chez ${jobOffer.company}. Mon profil apportera une réelle valeur ajoutée à votre équipe.`,
+                `Ma formation et mon expérience me permettent d'être immédiatement opérationnel(le) sur le poste de ${jobOffer.title}. Rejoindre ${jobOffer.company} représenterait une opportunité formidable de développement.`
+            ];
+            
+            return fallbacks[Math.floor(Math.random() * fallbacks.length)];
         }
 
         // Nettoyer le contenu
@@ -202,6 +300,9 @@ Paragraphe de motivation:`;
             .replace(/\n+/g, ' ') // Remplacer retours à la ligne
             .replace(/\s+/g, ' ') // Normaliser espaces
             .trim();
+
+        // Enlever les instructions résiduelles
+        content = content.replace(/^(Rédigez|Paragraphe de motivation|Candidat|Expérience|Instructions)[:.]?\s*/i, '');
 
         // Limiter à 3 phrases maximum
         const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
@@ -215,8 +316,8 @@ Paragraphe de motivation:`;
         }
 
         // Vérification de longueur finale
-        if (content.length < 50) {
-            return `Mon profil correspond parfaitement au poste de ${jobOffer.title} chez ${jobOffer.company}. Mes compétences et mon expérience me permettront de contribuer efficacement à vos projets. Je serais ravi(e) de rejoindre votre équipe dynamique.`;
+        if (content.length < 40) {
+            return `Mon profil correspond parfaitement au poste de ${jobOffer.title} chez ${jobOffer.company}. Mes compétences me permettront de contribuer efficacement à vos projets et je serais ravi(e) de rejoindre votre équipe.`;
         }
 
         return content;
@@ -227,7 +328,7 @@ Paragraphe de motivation:`;
             return {
                 success: false,
                 error: 'IA non configurée ou non disponible',
-                provider: 'Hugging Face'
+                provider: `Hugging Face (${this.activeProvider || 'aucun'})`
             };
         }
 
@@ -248,7 +349,7 @@ Paragraphe de motivation:`;
 
             return {
                 success: true,
-                provider: 'Hugging Face',
+                provider: `Hugging Face (${this.activeProvider})`,
                 model: this.activeModel,
                 sample: content.substring(0, 80) + '...',
                 message: 'IA opérationnelle'
@@ -257,7 +358,7 @@ Paragraphe de motivation:`;
             return {
                 success: false,
                 error: error.message,
-                provider: 'Hugging Face',
+                provider: `Hugging Face (${this.activeProvider})`,
                 model: this.activeModel
             };
         }
@@ -266,8 +367,9 @@ Paragraphe de motivation:`;
     getStatus() {
         return {
             enabled: this.isEnabled,
+            provider: this.activeProvider,
             model: this.activeModel,
-            provider: 'Hugging Face',
+            platform: 'Hugging Face',
             cacheSize: this.cache.size
         };
     }

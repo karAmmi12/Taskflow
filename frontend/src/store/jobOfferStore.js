@@ -10,7 +10,7 @@ const useJobOfferStore = create((set, get) => ({
         applied: 0,
         recentOffers: 0,
         bySource: [],
-        apiStatus: { adzuna: false, jobTome: false, total: 0 }
+        apiStatus: { adzuna: false, franceTravail: false, total: 0 }
     },
     loading: false,
     error: null,

@@ -11,7 +11,7 @@ const testAIConnection = async (req, res) => {
         
         res.json({
             ...result,
-            provider: 'Hugging Face (GRATUIT)'
+            provider: 'Hugging Face'
         });
     } catch (error) {
         console.error('❌ Erreur test IA:', error);
@@ -72,7 +72,7 @@ const generateCV = async (req, res) => {
                 id: document.id,
                 filename: document.filename,
                 downloadUrl: `/api/documents/download/${document.id}`,
-                provider: 'Template LaTeX (GRATUIT)'
+                provider: 'Template LaTeX'
             }
         });
 
@@ -146,7 +146,7 @@ const generateCoverLetter = async (req, res) => {
                 filename: document.filename,
                 downloadUrl: `/api/documents/download/${document.id}`,
                 aiGenerated: result.aiGenerated,
-                provider: result.aiGenerated ? 'IA Hugging Face (GRATUIT)' : 'Template LaTeX (GRATUIT)'
+                provider: result.aiGenerated ? 'IA Hugging Face' : 'Template LaTeX'
             }
         });
 

@@ -44,11 +44,7 @@ services:
       FRANCE_TRAVAIL_CLIENT_ID: ${FRANCE_TRAVAIL_CLIENT_ID}
       FRANCE_TRAVAIL_CLIENT_SECRET: ${FRANCE_TRAVAIL_CLIENT_SECRET}
       HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
-      AI_PROVIDER: ${AI_PROVIDER}
-      LATEX_COMPILER: ${LATEX_COMPILER}
       DOCUMENTS_STORAGE_PATH: ${DOCUMENTS_STORAGE_PATH}
-
-
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,11 +58,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=http://localhost:${BACKEND_PORT}/api
+        VITE_API_URL: http://localhost:${BACKEND_PORT}/api
     container_name: taskflow-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${FRONTEND_PROD_PORT:-8080}:80"
     depends_on:
       - backend
     networks:

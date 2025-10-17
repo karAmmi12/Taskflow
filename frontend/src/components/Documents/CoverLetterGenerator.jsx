@@ -114,7 +114,8 @@ const CoverLetterGenerator = ({ userProfile, onDocumentGenerated, aiEnabled }) =
       const data = await response.json();
       
       if (response.ok) {
-        window.open(data.document.downloadUrl, '_blank');
+        // 🔧 SOLUTION: Téléchargement direct avec token
+        await downloadDocument(data.document.id, data.document.filename);
         
         const method = data.document.aiGenerated ? 'avec IA Hugging Face' : 'avec template LaTeX';
         alert(`✅ Lettre générée avec succès ${method} !`);
@@ -134,6 +135,34 @@ const CoverLetterGenerator = ({ userProfile, onDocumentGenerated, aiEnabled }) =
       alert('❌ Erreur lors de la génération');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // 🔧 Fonction de téléchargement sécurisée
+  const downloadDocument = async (documentId, filename) => {
+    try {
+      const response = await fetch(`/api/documents/download/${documentId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        throw new Error('Erreur téléchargement');
+      }
+    } catch (error) {
+      console.error('Erreur téléchargement:', error);
+      alert('❌ Erreur lors du téléchargement');
     }
   };
 
@@ -173,9 +202,6 @@ const CoverLetterGenerator = ({ userProfile, onDocumentGenerated, aiEnabled }) =
               {options.useAI ? '🤖 Mode IA Hugging Face' : '📝 Mode Template LaTeX'}
             </span>
           </div>
-          <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 text-xs font-medium rounded-full">
-            ✨ 100% GRATUIT
-          </span>
         </div>
         <p className="text-xs text-blue-700 dark:text-blue-500 mt-1">
           {options.useAI 
@@ -430,7 +456,7 @@ const CoverLetterGenerator = ({ userProfile, onDocumentGenerated, aiEnabled }) =
               <Wand2 className="w-5 h-5" />
             )}
             <span>
-              Générer avec {options.useAI ? 'IA Hugging Face' : 'Template LaTeX'} (GRATUIT)
+              Générer avec {options.useAI ? 'IA Hugging Face' : 'Template LaTeX'}
             </span>
           </>
         )}

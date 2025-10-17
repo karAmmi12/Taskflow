@@ -1,6 +1,34 @@
 import { useState } from 'react';
 import { FileText, Wand2, Loader2, AlertCircle } from 'lucide-react';
 
+
+const downloadDocument = async (documentId, filename) => {
+  try {
+    const response = await fetch(`/api/documents/download/${documentId}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } else {
+      throw new Error('Erreur téléchargement');
+    }
+  } catch (error) {
+    console.error('Erreur téléchargement:', error);
+    alert('❌ Erreur lors du téléchargement');
+  }
+};
+
 const CVGenerator = ({ userProfile }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState('modern');
@@ -37,8 +65,8 @@ const CVGenerator = ({ userProfile }) => {
       const data = await response.json();
       
       if (response.ok) {
-        // Télécharger automatiquement le CV généré
-        window.open(data.document.downloadUrl, '_blank');
+        // 🔧 Utiliser le téléchargement sécurisé
+        await downloadDocument(data.document.id, data.document.filename);
         alert('✅ CV généré avec succès (Templates personnalisés) !');
       } else {
         alert(`❌ Erreur: ${data.error}`);
@@ -71,9 +99,6 @@ const CVGenerator = ({ userProfile }) => {
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-green-800 dark:text-green-400">
             🚀 Templates LaTeX Professionnels
-          </span>
-          <span className="px-3 py-1 bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 text-xs font-medium rounded-full">
-            ✨ 100% GRATUIT
           </span>
         </div>
       </div>
@@ -178,7 +203,7 @@ const CVGenerator = ({ userProfile }) => {
         ) : (
           <>
             <Wand2 className="w-5 h-5" />
-            <span>Générer mon CV personnalisé (GRATUIT)</span>
+            <span>Générer mon CV personnalisé</span>
           </>
         )}
       </button>

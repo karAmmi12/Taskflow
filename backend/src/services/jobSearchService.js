@@ -10,11 +10,6 @@ class JobSearchService {
                 appKey: process.env.ADZUNA_APP_KEY,
                 enabled: !!(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY)
             },
-            jobsearch: {
-                baseUrl: 'https://jobsearch.api.jobtome.com/api/v2/jobs',
-                apiKey: process.env.JOBTOME_API_KEY,
-                enabled: !!process.env.JOBTOME_API_KEY
-            },
             franceTravail: {
                 baseUrl: 'https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search',
                 tokenUrl: 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire', // ✅ URL corrigée
@@ -29,7 +24,6 @@ class JobSearchService {
          // Debug: Afficher le statut des APIs au démarrage
         console.log('🔧 Configuration des APIs d\'emploi:');
         console.log('   Adzuna:', this.apis.adzuna.enabled ? '✅ Activée' : '❌ Désactivée');
-        console.log('   JobTome:', this.apis.jobsearch.enabled ? '✅ Activée' : '❌ Désactivée');
         console.log('   France Travail:', this.apis.franceTravail.enabled ? '✅ Activée' : '❌ Désactivée');
 
     }
@@ -105,47 +99,6 @@ class JobSearchService {
         }
     }
 
-    // Recherche via JobTome (international)
-    async searchJobTome(alert) {
-        if (!this.apis.jobsearch.enabled) {
-            console.log('JobTome API non configurée');
-            return [];
-        }
-
-        try {
-            const params = {
-                api_key: this.apis.jobsearch.apiKey,
-                q: alert.keywords.join(' '),
-                l: alert.location || 'France',
-                num: 20,
-                sort: 'date'
-            };
-
-            if (alert.company) {
-                params.company = alert.company;
-            }
-
-            const response = await axios.get(this.apis.jobsearch.baseUrl, { params });
-            
-            return response.data.jobs.map(job => ({
-                id: `jobtome_${job.jobkey}`,
-                title: job.jobtitle,
-                company: job.company,
-                location: job.formattedLocation,
-                salary: job.salary || null,
-                contract: null,
-                description: job.snippet,
-                url: job.url,
-                source: 'JobTome',
-                publishedAt: new Date(job.date),
-                matchScore: this.calculateMatchScore(alert, job)
-            }));
-
-        } catch (error) {
-            console.error('Erreur JobTome API:', error.response?.data || error.message);
-            return [];
-        }
-    }
 
     // Authentification France Travail (OAuth2)
     async getFranceTravailToken() {
@@ -314,9 +267,6 @@ class JobSearchService {
             promises.push(this.searchAdzuna(alert));
         }
         
-        if (this.apis.jobsearch.enabled) {
-            promises.push(this.searchJobTome(alert));
-        }
         if (this.apis.franceTravail.enabled) {
             promises.push(this.searchFranceTravail(alert));
         }
@@ -357,7 +307,6 @@ class JobSearchService {
         // Correspondance localisation (poids: 15%)
         if (alert.location && job.location) {
             // Pour Adzuna: job.location est déjà transformé en string dans searchAdzuna
-            // Pour JobTome: job.location est directement une string
             const jobLocationStr = typeof job.location === 'string' 
                 ? job.location.toLowerCase() 
                 : job.location.display_name?.toLowerCase() || '';
@@ -406,7 +355,6 @@ class JobSearchService {
     getApiStatus() {
         return {
             adzuna: this.apis.adzuna.enabled,
-            jobTome: this.apis.jobsearch.enabled,
             franceTravail: this.apis.franceTravail.enabled,
             total: Object.values(this.apis).filter(api => api.enabled).length
         };
